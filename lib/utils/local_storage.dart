@@ -67,6 +67,39 @@ class LocalStorage {
     };
   }
 
+  // ── Días de descanso ──────────────────────────────────────
+  // 0=Lun, 1=Mar, 2=Mié, 3=Jue, 4=Vie, 5=Sáb, 6=Dom
+  static Future<void> saveRestDays(List<int> days) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('restDays', days.map((d) => '$d').toList());
+    await prefs.setString('restDaysSetDate', DateTime.now().toIso8601String());
+  }
+
+  static Future<List<int>> getRestDays() async {
+    final prefs = await SharedPreferences.getInstance();
+    final days = prefs.getStringList('restDays') ?? [];
+    return days.map((d) => int.parse(d)).toList();
+  }
+
+  // Días que faltan para poder cambiarlos (bloqueo 30 días)
+  static Future<int> daysUntilCanChangeRestDays() async {
+    final prefs = await SharedPreferences.getInstance();
+    final dateStr = prefs.getString('restDaysSetDate');
+    if (dateStr == null) return 0;
+    final setDate = DateTime.parse(dateStr);
+    final diff = DateTime.now().difference(setDate).inDays;
+    final remaining = 30 - diff;
+    return remaining > 0 ? remaining : 0;
+  }
+
+  // Si hoy es día de descanso
+  static Future<bool> isTodayRestDay() async {
+    final days = await getRestDays();
+    // weekday: 1=Lun...7=Dom → convertimos a 0=Lun...6=Dom
+    final todayIndex = DateTime.now().weekday - 1;
+    return days.contains(todayIndex);
+  }
+
   // ── Progreso físico del día ───────────────────────────────
   static Future<void> saveExerciseProgress(int index, String goal) async {
     final prefs = await SharedPreferences.getInstance();
@@ -106,19 +139,35 @@ class LocalStorage {
     }
   }
 
-  // ── Racha física ──────────────────────────────────────────
+  // ── Racha física (respeta días de descanso) ───────────────
   static Future<void> registerWorkoutDone() async {
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final lastStr = prefs.getString('lastWorkoutDate');
     final streak = prefs.getInt('streak') ?? 0;
+
     if (lastStr != null) {
       final last = DateTime.parse(lastStr);
       final lastDay = DateTime(last.year, last.month, last.day);
       final diff = today.difference(lastDay).inDays;
       if (diff == 0) return;
-      await prefs.setInt('streak', diff == 1 ? streak + 1 : 1);
+
+      if (diff == 1) {
+        await prefs.setInt('streak', streak + 1);
+      } else {
+        // Verifica si los días intermedios eran todos de descanso
+        final restDays = await getRestDays();
+        bool allRest = true;
+        for (int i = 1; i < diff; i++) {
+          final checkDay = lastDay.add(Duration(days: i));
+          if (!restDays.contains(checkDay.weekday - 1)) {
+            allRest = false;
+            break;
+          }
+        }
+        await prefs.setInt('streak', allRest ? streak + 1 : 1);
+      }
     } else {
       await prefs.setInt('streak', 1);
     }
@@ -133,6 +182,56 @@ class LocalStorage {
   static Future<bool> workedOutToday() async {
     final prefs = await SharedPreferences.getInstance();
     final lastStr = prefs.getString('lastWorkoutDate');
+    if (lastStr == null) return false;
+    final last = DateTime.parse(lastStr);
+    final now = DateTime.now();
+    return last.year == now.year &&
+        last.month == now.month &&
+        last.day == now.day;
+  }
+
+  // ── Racha mental (respeta días de descanso) ───────────────
+  static Future<void> registerMentalDone() async {
+    final prefs = await SharedPreferences.getInstance();
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final lastStr = prefs.getString('lastMentalDate');
+    final streak = prefs.getInt('mentalStreak') ?? 0;
+
+    if (lastStr != null) {
+      final last = DateTime.parse(lastStr);
+      final lastDay = DateTime(last.year, last.month, last.day);
+      final diff = today.difference(lastDay).inDays;
+      if (diff == 0) return;
+
+      if (diff == 1) {
+        await prefs.setInt('mentalStreak', streak + 1);
+      } else {
+        final restDays = await getRestDays();
+        bool allRest = true;
+        for (int i = 1; i < diff; i++) {
+          final checkDay = lastDay.add(Duration(days: i));
+          if (!restDays.contains(checkDay.weekday - 1)) {
+            allRest = false;
+            break;
+          }
+        }
+        await prefs.setInt('mentalStreak', allRest ? streak + 1 : 1);
+      }
+    } else {
+      await prefs.setInt('mentalStreak', 1);
+    }
+    await prefs.setString('lastMentalDate', today.toIso8601String());
+  }
+
+  static Future<int> getMentalStreak() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('mentalStreak') ?? 0;
+  }
+
+  static Future<bool> mentalDoneToday() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastStr = prefs.getString('lastMentalDate');
     if (lastStr == null) return false;
     final last = DateTime.parse(lastStr);
     final now = DateTime.now();
@@ -213,41 +312,6 @@ class LocalStorage {
     final prefs = await SharedPreferences.getInstance();
     final done = prefs.getStringList('mental_progress_${_todayKey()}') ?? [];
     return done.map((e) => int.parse(e)).toList();
-  }
-
-  // ── Racha mental ──────────────────────────────────────────
-  static Future<void> registerMentalDone() async {
-    final prefs = await SharedPreferences.getInstance();
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final lastStr = prefs.getString('lastMentalDate');
-    final streak = prefs.getInt('mentalStreak') ?? 0;
-    if (lastStr != null) {
-      final last = DateTime.parse(lastStr);
-      final lastDay = DateTime(last.year, last.month, last.day);
-      final diff = today.difference(lastDay).inDays;
-      if (diff == 0) return;
-      await prefs.setInt('mentalStreak', diff == 1 ? streak + 1 : 1);
-    } else {
-      await prefs.setInt('mentalStreak', 1);
-    }
-    await prefs.setString('lastMentalDate', today.toIso8601String());
-  }
-
-  static Future<int> getMentalStreak() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getInt('mentalStreak') ?? 0;
-  }
-
-  static Future<bool> mentalDoneToday() async {
-    final prefs = await SharedPreferences.getInstance();
-    final lastStr = prefs.getString('lastMentalDate');
-    if (lastStr == null) return false;
-    final last = DateTime.parse(lastStr);
-    final now = DateTime.now();
-    return last.year == now.year &&
-        last.month == now.month &&
-        last.day == now.day;
   }
 
   // ── Helpers ───────────────────────────────────────────────

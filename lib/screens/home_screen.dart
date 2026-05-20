@@ -12,6 +12,18 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _formDone = false;
   int _streak = 0;
   int _mentalStreak = 0;
+  bool _isRestDay = false;
+  List<int> _restDays = [];
+
+  final List<String> _dayNames = [
+    'Lun',
+    'Mar',
+    'Mié',
+    'Jue',
+    'Vie',
+    'Sáb',
+    'Dom',
+  ];
 
   @override
   void initState() {
@@ -24,12 +36,16 @@ class _HomeScreenState extends State<HomeScreen> {
     final formDone = await LocalStorage.isFormCompleted();
     final streak = await LocalStorage.getStreak();
     final mentalStreak = await LocalStorage.getMentalStreak();
+    final isRestDay = await LocalStorage.isTodayRestDay();
+    final restDays = await LocalStorage.getRestDays();
     if (!mounted) return;
     setState(() {
       _name = name;
       _formDone = formDone;
       _streak = streak;
       _mentalStreak = mentalStreak;
+      _isRestDay = isRestDay;
+      _restDays = restDays;
     });
   }
 
@@ -97,7 +113,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Tarjeta de sección ────────────────────────────────────
   Widget _sectionCard({
     required String emoji,
     required Color emojiColor,
@@ -117,9 +132,7 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           color: locked ? Colors.grey.shade50 : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: locked ? Colors.grey.shade200 : Colors.grey.shade200,
-          ),
+          border: Border.all(color: Colors.grey.shade200),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.04),
@@ -130,7 +143,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Row(
           children: [
-            // Ícono
             Container(
               width: 52,
               height: 52,
@@ -150,10 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     : Text(emoji, style: const TextStyle(fontSize: 24)),
               ),
             ),
-
             const SizedBox(width: 14),
-
-            // Texto
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,7 +214,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-
             const SizedBox(width: 8),
             Icon(
               locked ? Icons.lock_outline : Icons.chevron_right,
@@ -218,7 +226,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Info card (quiénes somos) ─────────────────────────────
   Widget _infoCard(IconData icon, Color iconColor, String title, String desc) {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -261,6 +268,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _streakBadge(String text, {Color? bg}) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+    decoration: BoxDecoration(
+      color: bg ?? Colors.white.withOpacity(0.2),
+      borderRadius: BorderRadius.circular(20),
+    ),
+    child: Text(
+      text,
+      style: const TextStyle(color: Colors.white, fontSize: 11),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final screenW = MediaQuery.of(context).size.width;
@@ -297,7 +316,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Banner de bienvenida ────────────────────
+              // ── Banner ──────────────────────────────────
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(20),
@@ -338,17 +357,36 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(height: 12),
 
-                          // Rachas
+                          // Rachas y día de descanso
                           Wrap(
                             spacing: 8,
                             runSpacing: 6,
                             children: [
-                              _streakBadge('🔥 $_streak días de racha física'),
-                              _streakBadge(
-                                '🧘 $_mentalStreak días de racha mental',
-                              ),
+                              if (_isRestDay)
+                                _streakBadge(
+                                  '😴 Hoy es día de descanso',
+                                  bg: Colors.white.withOpacity(0.25),
+                                )
+                              else ...[
+                                _streakBadge('🔥 $_streak días racha física'),
+                                _streakBadge(
+                                  '🧘 $_mentalStreak días racha mental',
+                                ),
+                              ],
                             ],
                           ),
+
+                          // Muestra días de descanso configurados
+                          if (_restDays.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              '😴 Descanso: ${_restDays.map((d) => _dayNames[d]).join(' y ')}',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.6),
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -360,13 +398,41 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: Colors.white.withOpacity(0.15),
                         shape: BoxShape.circle,
                       ),
-                      child: const Center(
-                        child: Text('🌟', style: TextStyle(fontSize: 32)),
+                      child: Center(
+                        child: Text(
+                          _isRestDay ? '😴' : '🌟',
+                          style: const TextStyle(fontSize: 32),
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
+
+              // Aviso día de descanso
+              if (_isRestDay) ...[
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: const Row(
+                    children: [
+                      Text('😴', style: TextStyle(fontSize: 20)),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Hoy es tu día de descanso. Tu racha está protegida. ¡Descansa y recupérate!',
+                          style: TextStyle(fontSize: 13, color: Colors.black87),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
 
               // Aviso si no llenó formulario
               if (!_formDone) ...[
@@ -394,15 +460,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
 
               const SizedBox(height: 24),
-
-              // ── Secciones ───────────────────────────────
               const Text(
                 '¿Qué quieres hacer hoy?',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 12),
 
-              // Datos personales
               _sectionCard(
                 emoji: '👤',
                 emojiColor: const Color(0xFF6C63FF),
@@ -419,7 +482,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ).then((_) => _loadData()),
               ),
 
-              // Rutinas
               _sectionCard(
                 emoji: '💪',
                 emojiColor: const Color(0xFF43A047),
@@ -435,7 +497,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     : _showLockedMessage(),
               ),
 
-              // Salud mental
               _sectionCard(
                 emoji: '🧠',
                 emojiColor: const Color(0xFFE91E63),
@@ -468,7 +529,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 'Conectar el bienestar físico y mental en una sola plataforma. Sabemos que la insatisfacción corporal afecta directamente la salud emocional — Luxury aborda ambas.',
               ),
 
-              // Grid 2 columnas
               Row(
                 children: [
                   Expanded(
@@ -571,16 +631,4 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
-
-  Widget _streakBadge(String text) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-    decoration: BoxDecoration(
-      color: Colors.white.withOpacity(0.2),
-      borderRadius: BorderRadius.circular(20),
-    ),
-    child: Text(
-      text,
-      style: const TextStyle(color: Colors.white, fontSize: 11),
-    ),
-  );
 }

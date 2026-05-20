@@ -16,13 +16,16 @@ class _UserFormScreenState extends State<UserFormScreen> {
   final _heightCtrl = TextEditingController();
 
   String _goal = 'Perder peso';
-  // ignore: unused_field
-  String _previousGoal = 'Perder peso';
   String? _ageError;
   String? _weightError;
   String? _heightError;
   double? _imc;
   bool _saved = false;
+
+  // Días de descanso
+  List<int> _restDays = [];
+  int _daysToChange = 0;
+  bool _restDaysSet = false;
 
   final List<String> _goals = [
     'Perder peso',
@@ -30,6 +33,17 @@ class _UserFormScreenState extends State<UserFormScreen> {
     'Mejorar resistencia',
     'Reducir estrés',
     'Mejorar autoestima',
+  ];
+
+  // 0=Lun, 1=Mar, 2=Mié, 3=Jue, 4=Vie, 5=Sáb, 6=Dom
+  final List<String> _dayNames = [
+    'Lun',
+    'Mar',
+    'Mié',
+    'Jue',
+    'Vie',
+    'Sáb',
+    'Dom',
   ];
 
   @override
@@ -40,15 +54,22 @@ class _UserFormScreenState extends State<UserFormScreen> {
 
   Future<void> _loadSaved() async {
     final data = await LocalStorage.getFormData();
-    if (data == null) return;
+    final restDays = await LocalStorage.getRestDays();
+    final daysToChg = await LocalStorage.daysUntilCanChangeRestDays();
+
+    if (!mounted) return;
     setState(() {
-      _ageCtrl.text = data['age'].toString();
-      _weightCtrl.text = data['weight'].toString();
-      _heightCtrl.text = data['height'].toString();
-      _goal = data['goal'];
-      _previousGoal = data['goal'];
-      _imc = _calcIMC(data['weight'], data['height']);
-      _saved = true;
+      if (data != null) {
+        _ageCtrl.text = data['age'].toString();
+        _weightCtrl.text = data['weight'].toString();
+        _heightCtrl.text = data['height'].toString();
+        _goal = data['goal'];
+        _imc = _calcIMC(data['weight'], data['height']);
+        _saved = true;
+      }
+      _restDays = restDays;
+      _daysToChange = daysToChg;
+      _restDaysSet = restDays.isNotEmpty;
     });
   }
 
@@ -86,11 +107,8 @@ class _UserFormScreenState extends State<UserFormScreen> {
     return null;
   }
 
-  // Maneja el cambio de objetivo con aviso si hay progreso del día
   Future<void> _handleGoalChange(String newGoal) async {
     if (newGoal == _goal) return;
-
-    // Si el objetivo anterior ya tenía progreso hoy, muestra aviso
     final progress = await LocalStorage.getTodayProgress(_goal);
     if (progress.isNotEmpty && mounted) {
       final confirm = await showDialog<bool>(
@@ -133,14 +151,66 @@ class _UserFormScreenState extends State<UserFormScreen> {
           ],
         ),
       );
-
-      if (confirm != true) return; // canceló, no cambia
-
-      // Limpia el progreso del día
+      if (confirm != true) return;
       await LocalStorage.clearTodayProgress();
     }
-
     setState(() => _goal = newGoal);
+  }
+
+  // ── Manejo de días de descanso ────────────────────────────
+  void _toggleRestDay(int day) {
+    if (_daysToChange > 0 && _restDaysSet) return; // bloqueado
+
+    setState(() {
+      if (_restDays.contains(day)) {
+        _restDays.remove(day);
+      } else {
+        if (_restDays.length < 2) {
+          _restDays.add(day);
+        } else {
+          // Ya tiene 2, reemplaza el más antiguo
+          _restDays.removeAt(0);
+          _restDays.add(day);
+        }
+      }
+    });
+  }
+
+  Future<void> _saveRestDays() async {
+    if (_restDays.length != 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Selecciona exactamente 2 días de descanso.'),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+      );
+      return;
+    }
+    await LocalStorage.saveRestDays(_restDays);
+    final daysToChg = await LocalStorage.daysUntilCanChangeRestDays();
+    if (!mounted) return;
+    setState(() {
+      _daysToChange = daysToChg;
+      _restDaysSet = true;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.white, size: 18),
+            SizedBox(width: 8),
+            Text('Días de descanso guardados.'),
+          ],
+        ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   Future<void> _save() async {
@@ -166,7 +236,6 @@ class _UserFormScreenState extends State<UserFormScreen> {
     setState(() {
       _imc = _calcIMC(weight, height);
       _saved = true;
-      _previousGoal = _goal;
     });
   }
 
@@ -238,7 +307,6 @@ class _UserFormScreenState extends State<UserFormScreen> {
             ),
             const SizedBox(height: 10),
 
-            // Chips de objetivo con aviso al cambiar
             Wrap(
               spacing: 10,
               runSpacing: 8,
@@ -279,7 +347,7 @@ class _UserFormScreenState extends State<UserFormScreen> {
                   .toList(),
             ),
 
-            // Tarjeta IMC
+            // IMC
             if (_imc != null) ...[
               const SizedBox(height: 28),
               _IMCCard(imc: _imc!, info: _imcInfo(_imc!)),
@@ -314,6 +382,153 @@ class _UserFormScreenState extends State<UserFormScreen> {
                 ),
               ),
             ],
+
+            // ── Días de descanso ──────────────────────────
+            const SizedBox(height: 28),
+            const Divider(),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                const Icon(Icons.hotel, color: Color(0xFF6C63FF), size: 20),
+                const SizedBox(width: 8),
+                const Text(
+                  'Días de descanso',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const Spacer(),
+                if (_daysToChange > 0 && _restDaysSet)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.orange.shade200),
+                    ),
+                    child: Text(
+                      '🔒 $_daysToChange días',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.orange.shade700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+
+            Text(
+              _daysToChange > 0 && _restDaysSet
+                  ? 'Podrás cambiar tus días de descanso en $_daysToChange días.'
+                  : 'Elige exactamente 2 días de descanso. Solo podrás cambiarlos cada 30 días.',
+              style: const TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+
+            // Selector de días
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: List.generate(7, (i) {
+                final selected = _restDays.contains(i);
+                final blocked = _daysToChange > 0 && _restDaysSet;
+                return GestureDetector(
+                  onTap: blocked ? null : () => _toggleRestDay(i),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? const Color(0xFF6C63FF)
+                          : blocked
+                          ? Colors.grey.shade100
+                          : Colors.grey.shade50,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: selected
+                            ? const Color(0xFF6C63FF)
+                            : Colors.grey.shade300,
+                        width: selected ? 2 : 1,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        _dayNames[i],
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: selected
+                              ? Colors.white
+                              : blocked
+                              ? Colors.grey.shade400
+                              : Colors.black87,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Botón guardar días de descanso
+            if (!(_daysToChange > 0 && _restDaysSet))
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _saveRestDays,
+                  icon: const Icon(
+                    Icons.save_outlined,
+                    color: Color(0xFF6C63FF),
+                  ),
+                  label: const Text(
+                    'Guardar días de descanso',
+                    style: TextStyle(color: Color(0xFF6C63FF)),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: const BorderSide(color: Color(0xFF6C63FF)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+
+            // Info de días actuales si ya están guardados
+            if (_restDaysSet && _restDays.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF6C63FF).withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFF6C63FF).withOpacity(0.2),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Text('😴', style: TextStyle(fontSize: 18)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Tus días de descanso: ${_restDays.map((d) => _dayNames[d]).join(' y ')}. '
+                        'La racha no se rompe esos días.',
+                        style: const TextStyle(fontSize: 13, height: 1.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 24),
           ],
         ),
       ),
