@@ -5,9 +5,6 @@ import '../utils/local_storage.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/input_field.dart';
 
-const String _kRegisterBgUrl =
-    'https://plus.unsplash.com/premium_photo-1661387933176-7bcdd516e550?q=80&w=1169&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D';
-
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
   @override
@@ -98,8 +95,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
         fit: StackFit.expand,
         children: [
           // ── Imagen de fondo ──────────────────────────
-          Image.network(
-            _kRegisterBgUrl,
+          Image.asset(
+            'assets/images/fondo_registro.jpeg',
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(
               decoration: const BoxDecoration(

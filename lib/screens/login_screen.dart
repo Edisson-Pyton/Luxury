@@ -4,9 +4,6 @@ import '../utils/local_storage.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/input_field.dart';
 
-const String _kLoginBgUrl =
-    'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200&q=80';
-
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
   @override
@@ -73,8 +70,8 @@ class _LoginScreenState extends State<LoginScreen> {
         fit: StackFit.expand,
         children: [
           // ── Imagen de fondo ──────────────────────────
-          Image.network(
-            _kLoginBgUrl,
+          Image.asset(
+            'assets/images/fondo_inicio.jpeg',
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(
               decoration: const BoxDecoration(
