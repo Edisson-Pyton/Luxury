@@ -39,7 +39,7 @@ const Map<String, List<Exercise>> _routinesByGoal = {
       restSeconds: 30,
       muscles: 'Piernas, glúteos, hombros, cardio',
       imageUrl:
-          'https://okdiario.com/metabolic/wp-content/uploads/2024/09/Saltos-de-tijera-5-pasos-para-hacer-este-ejercicio-para-perder-peso-a-tu-rutina-de-fitness.jpg',
+          'https://static.nike.com/a/images/f_auto,cs_srgb/w_1920,c_limit/c4c25466-266e-44e6-9c67-03a5306a183f/cinco-beneficios-que-no-te-esperabas-de-los-saltos-de-tijera.jpg',
       howTo: [
         'Párate con los pies juntos y los brazos a los lados.',
         'Salta abriendo piernas al ancho de los hombros mientras subes los brazos.',
@@ -286,7 +286,7 @@ const Map<String, List<Exercise>> _routinesByGoal = {
       restSeconds: 45,
       muscles: 'Cuádriceps, glúteos, pantorrillas, cardio',
       imageUrl:
-          'https://images.unsplash.com/photo-1599058945522-28d584b6f0ff?w=800&q=80',
+          'https://ce8216f185.cbaul-cdnwnd.com/a1ec1c4cc4ea5246346a698640e3008e/200000047-189f0189f2/salto%20pierna.jpg?ph=ce8216f185',
       howTo: [
         'Párate con los pies al ancho de los hombros.',
         'Baja en sentadilla hasta que los muslos queden paralelos.',
@@ -309,7 +309,7 @@ const Map<String, List<Exercise>> _routinesByGoal = {
       restSeconds: 20,
       muscles: 'Core, hombros, caderas, cardio',
       imageUrl:
-          'https://images.unsplash.com/photo-1549060279-7e168fcee0c2?w=800&q=80',
+          'https://st4.depositphotos.com/4293685/19868/v/450/depositphotos_198689642-stock-illustration-healthy-woman-doing-mountain-climber.jpg',
       howTo: [
         'Posición de plancha alta con brazos extendidos.',
         'Alterna las rodillas hacia el pecho lo más rápido posible.',
@@ -331,7 +331,7 @@ const Map<String, List<Exercise>> _routinesByGoal = {
       restSeconds: 40,
       muscles: 'Pectoral, tríceps, core, caderas',
       imageUrl:
-          'https://images.unsplash.com/photo-1598971639058-fab3c3109a00?w=800&q=80',
+          'https://hips.hearstapps.com/hmg-prod/images/flexiones-1585824600.jpg',
       howTo: [
         'Haz una flexión completa.',
         'Al subir, lleva la rodilla derecha hacia el pecho.',
@@ -353,7 +353,7 @@ const Map<String, List<Exercise>> _routinesByGoal = {
       restSeconds: 60,
       muscles: 'Cuerpo completo',
       imageUrl:
-          'https://images.unsplash.com/photo-1601422407692-ec4eeec1d9b3?w=800&q=80',
+          'https://thumbs.dreamstime.com/b/siluetas-de-personas-realizando-varios-ejercicios-y-posturas-yoga-431664678.jpg',
       howTo: [
         '10 sentadillas sin parar.',
         'Inmediatamente 10 flexiones.',
@@ -400,7 +400,7 @@ const Map<String, List<Exercise>> _routinesByGoal = {
       restSeconds: 20,
       muscles: 'Espalda baja, caderas, hombros',
       imageUrl:
-          'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=800&q=80',
+          'https://cdn0.uncomo.com/es/posts/0/5/3/balasana_o_postura_del_nino_en_yoga_beneficios_y_como_hacerla_para_relajarse_55350_1200.jpg',
       howTo: [
         'Arrodíllate en el suelo con los glúteos sobre los talones.',
         'Inclina el torso hacia adelante extendiendo los brazos.',
@@ -422,7 +422,7 @@ const Map<String, List<Exercise>> _routinesByGoal = {
       restSeconds: 15,
       muscles: 'Cuello, trapecios, hombros',
       imageUrl:
-          'https://images.unsplash.com/photo-1566241142559-40e1dab266c6?w=800&q=80',
+          'https://content.healthwise.net/resources/14.7/es-us/media/medical/hw/aco6668_460x300.jpg',
       howTo: [
         'Siéntate o párate con la espalda recta.',
         'Inclina lentamente la cabeza hacia la derecha.',
@@ -466,7 +466,7 @@ const Map<String, List<Exercise>> _routinesByGoal = {
       restSeconds: 20,
       muscles: 'Hombros, trapecios, cuello',
       imageUrl:
-          'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800&q=80',
+          'https://static.vecteezy.com/system/resources/previews/017/457/662/non_2x/woman-demonstrates-how-to-do-shoulder-rotation-flat-illustration-female-exercise-isolated-on-white-background-athletic-girl-doing-exercises-vector.jpg',
       howTo: [
         'Párate o siéntate con la espalda recta.',
         'Sube los hombros hacia las orejas.',
@@ -491,7 +491,7 @@ const Map<String, List<Exercise>> _routinesByGoal = {
       restSeconds: 30,
       muscles: 'Mente, postura, confianza',
       imageUrl:
-          'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=800&q=80',
+          'https://us.images.westend61.de/0001077114j/vista-lateral-de-mujer-con-las-manos-en-la-cadera-estirando-contra-el-cielo-claro-en-la-playa-CAVF55016.jpg',
       howTo: [
         'Párate con los pies separados al ancho de los hombros.',
         'Pon las manos en la cadera o extiende los brazos en V.',
@@ -513,7 +513,7 @@ const Map<String, List<Exercise>> _routinesByGoal = {
       restSeconds: 45,
       muscles: 'Cuádriceps, glúteos, mente positiva',
       imageUrl:
-          'https://images.unsplash.com/photo-1574680178050-55c6a6a96e0a?w=800&q=80',
+          'https://image.tuasaude.com/media/article/il/sk/agachamento-livre_70856.jpg?width=686&height=487',
       howTo: [
         'Párate con los pies al ancho de los hombros.',
         'Al bajar en sentadilla di mentalmente: "soy capaz".',

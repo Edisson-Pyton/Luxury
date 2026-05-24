@@ -5,7 +5,7 @@ import '../widgets/custom_button.dart';
 import '../widgets/input_field.dart';
 
 const String _kLoginBgUrl =
-    'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200&q=80';
+    'https://wallpapers.com/images/hd/yoga-background-vhje1idvdj7qm33z.jpg';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});

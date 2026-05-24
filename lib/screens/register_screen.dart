@@ -6,7 +6,7 @@ import '../widgets/custom_button.dart';
 import '../widgets/input_field.dart';
 
 const String _kRegisterBgUrl =
-    'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=1200&q=80';
+    'https://wallpapers.com/images/hd/yoga-background-vhje1idvdj7qm33z.jpg';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
