@@ -1,9 +1,12 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../utils/local_storage.dart';
+import '../utils/api_service.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/input_field.dart';
+
+const String _kRegisterBgUrl =
+    'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?w=1200&q=80';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -23,6 +26,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   String? _phoneError;
   String? _passError;
   String? _confirmError;
+  String _generalError = '';
+  bool _loading = false;
 
   String? _validateName(String val) {
     if (val.isEmpty) return 'El nombre es obligatorio.';
@@ -66,6 +71,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _phoneError = _validatePhone(_phoneCtrl.text);
       _passError = _validatePassword(_passCtrl.text);
       _confirmError = _validateConfirm(_confirmCtrl.text);
+      _generalError = '';
     });
 
     if (_nameError != null ||
@@ -75,13 +81,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _confirmError != null)
       return;
 
-    await LocalStorage.saveUser(
-      _emailCtrl.text.trim(),
-      _passCtrl.text,
-      _nameCtrl.text.trim(),
+    setState(() => _loading = true);
+
+    final result = await ApiService.register(
+      name: _nameCtrl.text.trim(),
+      email: _emailCtrl.text.trim(),
+      phone: _phoneCtrl.text.trim(),
+      password: _passCtrl.text,
     );
+
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, '/home');
+    setState(() => _loading = false);
+
+    if (result['status'] == 201) {
+      Navigator.pushReplacementNamed(context, '/home');
+    } else {
+      final data = result['data'];
+      setState(() => _generalError = data['error'] ?? 'Error al registrarse.');
+    }
   }
 
   @override
@@ -94,9 +111,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ── Imagen de fondo ──────────────────────────
-          Image.asset(
-            'assets/images/fondo_registro.jpeg',
+          // Imagen de fondo
+          Image.network(
+            _kRegisterBgUrl,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(
               decoration: const BoxDecoration(
@@ -109,10 +126,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
 
-          // ── Capa oscura ──────────────────────────────
+          // Capa oscura
           Container(color: Colors.black.withOpacity(0.50)),
 
-          // ── Contenido ────────────────────────────────
+          // Contenido
           SafeArea(
             child: SingleChildScrollView(
               padding: EdgeInsets.only(bottom: bottom + 16),
@@ -158,7 +175,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                     SizedBox(height: size.height * 0.03),
 
-                    // ── Tarjeta glass ────────────────────
+                    // Tarjeta glass
                     ClipRRect(
                       borderRadius: BorderRadius.circular(24),
                       child: BackdropFilter(
@@ -176,7 +193,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              // Nombre
                               InputField(
                                 label: 'Nombre completo',
                                 controller: _nameCtrl,
@@ -191,7 +207,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ),
                               const SizedBox(height: 14),
 
-                              // Correo
                               InputField(
                                 label: 'Correo electrónico',
                                 controller: _emailCtrl,
@@ -202,7 +217,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ),
                               const SizedBox(height: 14),
 
-                              // Teléfono
                               InputField(
                                 label: 'Teléfono',
                                 controller: _phoneCtrl,
@@ -217,7 +231,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ),
                               const SizedBox(height: 14),
 
-                              // Contraseña
                               InputField(
                                 label: 'Contraseña',
                                 controller: _passCtrl,
@@ -233,7 +246,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ),
                               const SizedBox(height: 14),
 
-                              // Confirmar contraseña
                               InputField(
                                 label: 'Confirmar contraseña',
                                 controller: _confirmCtrl,
@@ -249,10 +261,71 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 onChanged: () => setState(() {}),
                               ),
 
+                              if (_generalError.isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: Colors.red.withOpacity(0.4),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.error_outline,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _generalError,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+
                               const SizedBox(height: 20),
-                              CustomButton(
-                                text: 'Registrarme',
-                                onPressed: _register,
+
+                              // Botón con loading
+                              SizedBox(
+                                width: double.infinity,
+                                height: 52,
+                                child: ElevatedButton(
+                                  onPressed: _loading ? null : _register,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF6C63FF),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  child: _loading
+                                      ? const SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            color: Colors.white,
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : const Text(
+                                          'Registrarme',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                ),
                               ),
                             ],
                           ),

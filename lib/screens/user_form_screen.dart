@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../utils/local_storage.dart';
+import '../utils/api_service.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/input_field.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class UserFormScreen extends StatefulWidget {
   const UserFormScreen({super.key});
@@ -21,6 +22,8 @@ class _UserFormScreenState extends State<UserFormScreen> {
   String? _heightError;
   double? _imc;
   bool _saved = false;
+  bool _loading = false;
+  bool _savingDays = false;
 
   // Días de descanso
   List<int> _restDays = [];
@@ -35,7 +38,6 @@ class _UserFormScreenState extends State<UserFormScreen> {
     'Mejorar autoestima',
   ];
 
-  // 0=Lun, 1=Mar, 2=Mié, 3=Jue, 4=Vie, 5=Sáb, 6=Dom
   final List<String> _dayNames = [
     'Lun',
     'Mar',
@@ -53,24 +55,29 @@ class _UserFormScreenState extends State<UserFormScreen> {
   }
 
   Future<void> _loadSaved() async {
-    final data = await LocalStorage.getFormData();
-    final restDays = await LocalStorage.getRestDays();
-    final daysToChg = await LocalStorage.daysUntilCanChangeRestDays();
-
+    final profile = await ApiService.getProfile();
     if (!mounted) return;
-    setState(() {
-      if (data != null) {
-        _ageCtrl.text = data['age'].toString();
-        _weightCtrl.text = data['weight'].toString();
-        _heightCtrl.text = data['height'].toString();
-        _goal = data['goal'];
-        _imc = _calcIMC(data['weight'], data['height']);
-        _saved = true;
-      }
-      _restDays = restDays;
-      _daysToChange = daysToChg;
-      _restDaysSet = restDays.isNotEmpty;
-    });
+    if (profile != null) {
+      final age = profile['age'];
+      final weight = profile['weight'];
+      final height = profile['height'];
+      setState(() {
+        if (age != null) _ageCtrl.text = age.toString();
+        if (weight != null) _weightCtrl.text = weight.toString();
+        if (height != null) _heightCtrl.text = height.toString();
+        _goal = profile['goal'] ?? 'Perder peso';
+        _restDays = List<int>.from(profile['rest_days'] ?? []);
+        _daysToChange = profile['days_to_change'] ?? 0;
+        _restDaysSet = _restDays.isNotEmpty;
+        _saved = profile['form_completed'] ?? false;
+        if (weight != null && height != null && weight > 0 && height > 0) {
+          _imc = _calcIMC(
+            (weight as num).toDouble(),
+            (height as num).toDouble(),
+          );
+        }
+      });
+    }
   }
 
   double? _calcIMC(double weight, double height) {
@@ -109,7 +116,9 @@ class _UserFormScreenState extends State<UserFormScreen> {
 
   Future<void> _handleGoalChange(String newGoal) async {
     if (newGoal == _goal) return;
-    final progress = await LocalStorage.getTodayProgress(_goal);
+
+    // Verifica si hay progreso hoy con el objetivo actual
+    final progress = await ApiService.getWorkoutProgress(_goal);
     if (progress.isNotEmpty && mounted) {
       final confirm = await showDialog<bool>(
         context: context,
@@ -125,7 +134,7 @@ class _UserFormScreenState extends State<UserFormScreen> {
             ],
           ),
           content: const Text(
-            'Tienes ejercicios completados hoy con tu objetivo actual. '
+            'Tienes ejercicios completados hoy. '
             'Si cambias el objetivo, el progreso de hoy se reiniciará.',
             style: TextStyle(color: Colors.black54),
           ),
@@ -152,15 +161,12 @@ class _UserFormScreenState extends State<UserFormScreen> {
         ),
       );
       if (confirm != true) return;
-      await LocalStorage.clearTodayProgress();
     }
     setState(() => _goal = newGoal);
   }
 
-  // ── Manejo de días de descanso ────────────────────────────
   void _toggleRestDay(int day) {
-    if (_daysToChange > 0 && _restDaysSet) return; // bloqueado
-
+    if (_daysToChange > 0 && _restDaysSet) return;
     setState(() {
       if (_restDays.contains(day)) {
         _restDays.remove(day);
@@ -168,7 +174,6 @@ class _UserFormScreenState extends State<UserFormScreen> {
         if (_restDays.length < 2) {
           _restDays.add(day);
         } else {
-          // Ya tiene 2, reemplaza el más antiguo
           _restDays.removeAt(0);
           _restDays.add(day);
         }
@@ -190,23 +195,34 @@ class _UserFormScreenState extends State<UserFormScreen> {
       );
       return;
     }
-    await LocalStorage.saveRestDays(_restDays);
-    final daysToChg = await LocalStorage.daysUntilCanChangeRestDays();
+
+    setState(() => _savingDays = true);
+    final ok = await ApiService.saveRestDays(_restDays);
     if (!mounted) return;
     setState(() {
-      _daysToChange = daysToChg;
-      _restDaysSet = true;
+      _savingDays = false;
+      _restDaysSet = ok;
+      _daysToChange = ok ? 30 : 0;
     });
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Row(
+        content: Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.white, size: 18),
-            SizedBox(width: 8),
-            Text('Días de descanso guardados.'),
+            Icon(
+              ok ? Icons.check_circle : Icons.error_outline,
+              color: Colors.white,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Text(
+              ok
+                  ? 'Días de descanso guardados.'
+                  : 'Error al guardar. Intenta de nuevo.',
+            ),
           ],
         ),
-        backgroundColor: Colors.green,
+        backgroundColor: ok ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
@@ -226,16 +242,25 @@ class _UserFormScreenState extends State<UserFormScreen> {
     final weight = double.parse(_weightCtrl.text);
     final height = double.parse(_heightCtrl.text);
 
-    await LocalStorage.saveFormData(
+    setState(() => _loading = true);
+
+    final ok = await ApiService.saveProfile(
       age: age,
       weight: weight,
       height: height,
       goal: _goal,
     );
 
+    if (!mounted) return;
+
+    // Actualiza también shared_preferences para acceso rápido
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('formCompleted', ok);
+
     setState(() {
+      _loading = false;
       _imc = _calcIMC(weight, height);
-      _saved = true;
+      _saved = ok;
     });
   }
 
@@ -258,7 +283,7 @@ class _UserFormScreenState extends State<UserFormScreen> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Usaremos estos datos para personalizar tus rutinas y recomendaciones.',
+              'Usaremos estos datos para personalizar tus rutinas.',
               style: TextStyle(color: Colors.grey),
             ),
             const SizedBox(height: 24),
@@ -354,9 +379,37 @@ class _UserFormScreenState extends State<UserFormScreen> {
             ],
 
             const SizedBox(height: 28),
-            CustomButton(
-              text: _saved ? 'Actualizar datos' : 'Guardar datos',
-              onPressed: _save,
+
+            // Botón guardar
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: _loading ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6C63FF),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: _loading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text(
+                        _saved ? 'Actualizar datos' : 'Guardar datos',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+              ),
             ),
 
             if (_saved) ...[
@@ -423,7 +476,7 @@ class _UserFormScreenState extends State<UserFormScreen> {
             Text(
               _daysToChange > 0 && _restDaysSet
                   ? 'Podrás cambiar tus días de descanso en $_daysToChange días.'
-                  : 'Elige exactamente 2 días de descanso. Solo podrás cambiarlos cada 30 días.',
+                  : 'Elige exactamente 2 días. Solo puedes cambiarlos cada 30 días.',
               style: const TextStyle(color: Colors.grey, fontSize: 13),
             ),
             const SizedBox(height: 14),
@@ -476,16 +529,24 @@ class _UserFormScreenState extends State<UserFormScreen> {
 
             const SizedBox(height: 16),
 
-            // Botón guardar días de descanso
             if (!(_daysToChange > 0 && _restDaysSet))
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _saveRestDays,
-                  icon: const Icon(
-                    Icons.save_outlined,
-                    color: Color(0xFF6C63FF),
-                  ),
+                  onPressed: _savingDays ? null : _saveRestDays,
+                  icon: _savingDays
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Color(0xFF6C63FF),
+                          ),
+                        )
+                      : const Icon(
+                          Icons.save_outlined,
+                          color: Color(0xFF6C63FF),
+                        ),
                   label: const Text(
                     'Guardar días de descanso',
                     style: TextStyle(color: Color(0xFF6C63FF)),
@@ -500,7 +561,6 @@ class _UserFormScreenState extends State<UserFormScreen> {
                 ),
               ),
 
-            // Info de días actuales si ya están guardados
             if (_restDaysSet && _restDays.isNotEmpty) ...[
               const SizedBox(height: 12),
               Container(
@@ -641,11 +701,11 @@ class _IMCCard extends StatelessWidget {
 
   String _tip(double imc) {
     if (imc < 18.5)
-      return 'Tu peso está por debajo del rango saludable. Te recomendamos rutinas de ganancia de masa y consultar un nutricionista.';
+      return 'Tu peso está por debajo del rango saludable. Te recomendamos rutinas de ganancia de masa.';
     if (imc < 25.0)
-      return '¡Excelente! Tu peso está en el rango saludable. Mantén tus hábitos con rutinas de mantenimiento.';
+      return '¡Excelente! Tu peso está en el rango saludable. Mantén tus hábitos.';
     if (imc < 30.0)
-      return 'Estás en sobrepeso. Las rutinas de cardio y una alimentación balanceada te ayudarán a mejorar.';
-    return 'Tu IMC indica obesidad. Te recomendamos comenzar con rutinas suaves y buscar apoyo profesional.';
+      return 'Estás en sobrepeso. Las rutinas de cardio te ayudarán a mejorar.';
+    return 'Tu IMC indica obesidad. Te recomendamos comenzar con rutinas suaves.';
   }
 }

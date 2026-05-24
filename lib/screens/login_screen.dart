@@ -1,8 +1,11 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import '../utils/local_storage.dart';
+import '../utils/api_service.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/input_field.dart';
+
+const String _kLoginBgUrl =
+    'https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=1200&q=80';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -17,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String? _emailError;
   String? _passError;
   String _generalError = '';
+  bool _loading = false;
 
   String? _validateEmail(String val) {
     if (val.isEmpty) return 'Ingresa tu correo.';
@@ -38,24 +42,23 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     if (_emailError != null || _passError != null) return;
 
-    final saved = await LocalStorage.getUser();
-    if (saved == null) {
-      setState(
-        () => _generalError = 'No hay cuenta registrada. Regístrate primero.',
-      );
-      return;
-    }
-    if (_emailCtrl.text.trim() == saved['email'] &&
-        _passCtrl.text == saved['password']) {
-      await LocalStorage.saveUser(
-        saved['email']!,
-        saved['password']!,
-        await LocalStorage.getName(),
-      );
-      if (!mounted) return;
+    setState(() => _loading = true);
+
+    final result = await ApiService.login(
+      email: _emailCtrl.text.trim(),
+      password: _passCtrl.text,
+    );
+
+    if (!mounted) return;
+    setState(() => _loading = false);
+
+    if (result['status'] == 200) {
       Navigator.pushReplacementNamed(context, '/home');
     } else {
-      setState(() => _generalError = 'Correo o contraseña incorrectos.');
+      final data = result['data'];
+      setState(
+        () => _generalError = data['error'] ?? 'Error al iniciar sesión.',
+      );
     }
   }
 
@@ -69,9 +72,9 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // ── Imagen de fondo ──────────────────────────
-          Image.asset(
-            'assets/images/fondo_inicio.jpeg',
+          // Imagen de fondo
+          Image.network(
+            _kLoginBgUrl,
             fit: BoxFit.cover,
             errorBuilder: (_, __, ___) => Container(
               decoration: const BoxDecoration(
@@ -84,10 +87,10 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
 
-          // ── Capa oscura ──────────────────────────────
+          // Capa oscura
           Container(color: Colors.black.withOpacity(0.45)),
 
-          // ── Contenido ────────────────────────────────
+          // Contenido
           SafeArea(
             child: SingleChildScrollView(
               padding: EdgeInsets.only(bottom: bottom),
@@ -119,7 +122,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 20),
 
                       const Text(
-                        'Bienvenido a Luxury',
+                        'Bienvenido de nuevo',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 26,
@@ -136,7 +139,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       SizedBox(height: size.height * 0.05),
 
-                      // ── Tarjeta glass ────────────────
+                      // Tarjeta glass
                       ClipRRect(
                         borderRadius: BorderRadius.circular(24),
                         child: BackdropFilter(
@@ -207,9 +210,37 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ],
 
                                 const SizedBox(height: 22),
-                                CustomButton(
-                                  text: 'Iniciar sesión',
-                                  onPressed: _login,
+
+                                // Botón con loading
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 52,
+                                  child: ElevatedButton(
+                                    onPressed: _loading ? null : _login,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF6C63FF),
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                    ),
+                                    child: _loading
+                                        ? const SizedBox(
+                                            width: 22,
+                                            height: 22,
+                                            child: CircularProgressIndicator(
+                                              color: Colors.white,
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Text(
+                                            'Iniciar sesión',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                  ),
                                 ),
                               ],
                             ),

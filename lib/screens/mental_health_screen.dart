@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../utils/local_storage.dart';
+import '../utils/api_service.dart';
 
 // ── Preguntas del test ────────────────────────────────────────
 class _Question {
@@ -269,13 +269,14 @@ class _MentalHealthScreenState extends State<MentalHealthScreen>
   }
 
   Future<void> _loadData() async {
-    final testDone = await LocalStorage.isMentalTestDone();
-    final testResult = await LocalStorage.getMentalTestResult();
-    final todayMood = await LocalStorage.getTodayMood();
-    final weekMoods = await LocalStorage.getWeekMoods();
-    final mentalDone = await LocalStorage.getTodayMentalProgress();
-    final mStreak = await LocalStorage.getMentalStreak();
-    final mDoneToday = await LocalStorage.mentalDoneToday();
+    // Test
+    final testData = await ApiService.getMentalTest();
+    // Ánimo
+    final moodData = await ApiService.getMood();
+    // Racha mental
+    final streakData = await ApiService.getMentalStreak();
+    // Progreso actividades
+    final mentalDone = await ApiService.getMentalProgress();
 
     if (!mounted) return;
 
@@ -285,24 +286,25 @@ class _MentalHealthScreenState extends State<MentalHealthScreen>
     );
     final allDone = completed.isNotEmpty && completed.every((c) => c);
 
+    // Convierte week_moods de Map<String,dynamic> a Map<String,int>
+    final rawMoods = moodData['week_moods'] as Map<String, dynamic>? ?? {};
+    final weekMoods = rawMoods.map((k, v) => MapEntry(k, (v as num).toInt()));
+
     setState(() {
-      _testDone = testDone;
-      _profile = testResult != null
-          ? _getProfile(testResult['score'] as int)
-          : null;
-      _todayMood = todayMood;
+      _testDone = testData['done'] ?? false;
+      _profile = _testDone ? _getProfile(testData['score'] as int) : null;
+      _todayMood = moodData['today_mood'] as int?;
       _weekMoods = weekMoods;
       _activitiesDone = completed;
-      _mentalStreak = mStreak;
-      _mentalDoneToday = mDoneToday;
-      _showMentalSummary = allDone && mDoneToday;
+      _mentalStreak = streakData['streak'] ?? 0;
+      _mentalDoneToday = streakData['done_today'] ?? false;
+      _showMentalSummary = allDone && (streakData['done_today'] ?? false);
       _loading = false;
     });
   }
 
   // ── Estado de ánimo con confirmación ─────────────────────
   Future<void> _confirmMood(int mood, String emoji, String label) async {
-    // Si ya registró hoy, mostrar aviso
     if (_todayMood != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -368,13 +370,30 @@ class _MentalHealthScreenState extends State<MentalHealthScreen>
     );
 
     if (confirm == true) {
-      await LocalStorage.saveMood(mood);
-      final weekMoods = await LocalStorage.getWeekMoods();
+      final result = await ApiService.saveMood(mood);
       if (!mounted) return;
-      setState(() {
-        _todayMood = mood;
-        _weekMoods = weekMoods;
-      });
+      if (result['status'] == 200) {
+        final moodData = await ApiService.getMood();
+        final rawMoods = moodData['week_moods'] as Map<String, dynamic>? ?? {};
+        final weekMoods = rawMoods.map(
+          (k, v) => MapEntry(k, (v as num).toInt()),
+        );
+        setState(() {
+          _todayMood = mood;
+          _weekMoods = weekMoods;
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result['data']['error'] ?? 'Error al guardar.'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -382,7 +401,7 @@ class _MentalHealthScreenState extends State<MentalHealthScreen>
   Future<void> _finishTest() async {
     final score = _answers.fold(0, (a, b) => a + (b == -1 ? 0 : b));
     final profile = _getProfile(score);
-    await LocalStorage.saveMentalTestResult(
+    await ApiService.saveMentalTest(
       profile: profile['title'],
       score: score,
       answers: _answers,
@@ -398,12 +417,11 @@ class _MentalHealthScreenState extends State<MentalHealthScreen>
 
   // ── Marcar actividad + racha ──────────────────────────────
   Future<void> _markActivity(int index) async {
-    await LocalStorage.saveMentalActivityProgress(index);
+    await ApiService.saveMentalProgress(index);
     setState(() => _activitiesDone[index] = true);
 
     if (_activitiesDone.every((d) => d)) {
-      await LocalStorage.registerMentalDone();
-      final streak = await LocalStorage.getMentalStreak();
+      final streak = await ApiService.registerMentalDone();
       if (!mounted) return;
       setState(() {
         _mentalStreak = streak;
@@ -433,7 +451,6 @@ class _MentalHealthScreenState extends State<MentalHealthScreen>
         foregroundColor: Colors.white,
         elevation: 0,
         actions: [
-          // Racha mental en AppBar
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Row(

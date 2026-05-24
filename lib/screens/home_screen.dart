@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import '../utils/local_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -14,6 +15,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _mentalStreak = 0;
   bool _isRestDay = false;
   List<int> _restDays = [];
+  bool _loading = true;
 
   final List<String> _dayNames = [
     'Lun',
@@ -32,20 +34,29 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadData() async {
-    final name = await LocalStorage.getName();
-    final formDone = await LocalStorage.isFormCompleted();
-    final streak = await LocalStorage.getStreak();
-    final mentalStreak = await LocalStorage.getMentalStreak();
-    final isRestDay = await LocalStorage.isTodayRestDay();
-    final restDays = await LocalStorage.getRestDays();
+    setState(() => _loading = true);
+
+    // Datos locales rápidos
+    final prefs = await SharedPreferences.getInstance();
+    final name = prefs.getString('name') ?? 'Usuario';
+    final formDone = prefs.getBool('formCompleted') ?? false;
+
+    // Datos del servidor
+    final workoutData = await ApiService.getWorkoutStreak();
+    final mentalData = await ApiService.getMentalStreak();
+    final profile = await ApiService.getProfile();
+
     if (!mounted) return;
     setState(() {
       _name = name;
       _formDone = formDone;
-      _streak = streak;
-      _mentalStreak = mentalStreak;
-      _isRestDay = isRestDay;
-      _restDays = restDays;
+      _streak = workoutData['streak'] ?? 0;
+      _mentalStreak = mentalData['streak'] ?? 0;
+      _isRestDay = workoutData['is_rest_day'] ?? false;
+      _restDays = profile != null
+          ? List<int>.from(profile['rest_days'] ?? [])
+          : [];
+      _loading = false;
     });
   }
 
@@ -62,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         content: const Text(
-          '¿Estás seguro de que quieres salir? Tendrás que volver a iniciar sesión.',
+          '¿Estás seguro de que quieres salir?',
           style: TextStyle(color: Colors.grey),
         ),
         actions: [
@@ -85,7 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     if (confirm == true) {
-      await LocalStorage.logout();
+      await ApiService.logout();
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/login');
     }
@@ -98,11 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Icon(Icons.lock_outline, color: Colors.white, size: 18),
             SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Primero completa tus datos personales para desbloquear esta sección.',
-              ),
-            ),
+            Expanded(child: Text('Primero completa tus datos personales.')),
           ],
         ),
         backgroundColor: const Color(0xFF6C63FF),
@@ -308,326 +315,335 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ],
         ),
-        body: SingleChildScrollView(
-          padding: EdgeInsets.symmetric(
-            horizontal: screenW > 600 ? screenW * 0.1 : 18,
-            vertical: 20,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Banner ──────────────────────────────────
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF6C63FF),
-                  borderRadius: BorderRadius.circular(20),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                padding: EdgeInsets.symmetric(
+                  horizontal: screenW > 600 ? screenW * 0.1 : 18,
+                  vertical: 20,
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    // ── Banner ────────────────────────────
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF6C63FF),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
                         children: [
-                          Text(
-                            'Bienvenido de nuevo',
-                            style: TextStyle(
-                              color: Colors.white.withOpacity(0.75),
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Hola, $_name 👋',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'Tu camino hacia el bienestar integral empieza aquí.',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-
-                          // Rachas y día de descanso
-                          Wrap(
-                            spacing: 8,
-                            runSpacing: 6,
-                            children: [
-                              if (_isRestDay)
-                                _streakBadge(
-                                  '😴 Hoy es día de descanso',
-                                  bg: Colors.white.withOpacity(0.25),
-                                )
-                              else ...[
-                                _streakBadge('🔥 $_streak días racha física'),
-                                _streakBadge(
-                                  '🧘 $_mentalStreak días racha mental',
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Bienvenido de nuevo',
+                                  style: TextStyle(
+                                    color: Colors.white.withOpacity(0.75),
+                                    fontSize: 13,
+                                  ),
                                 ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Hola, $_name 👋',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Tu camino hacia el bienestar integral empieza aquí.',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
+                                    height: 1.4,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  children: [
+                                    if (_isRestDay)
+                                      _streakBadge(
+                                        '😴 Hoy es día de descanso',
+                                        bg: Colors.white.withOpacity(0.25),
+                                      )
+                                    else ...[
+                                      _streakBadge(
+                                        '🔥 $_streak días racha física',
+                                      ),
+                                      _streakBadge(
+                                        '🧘 $_mentalStreak días racha mental',
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                if (_restDays.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    '😴 Descanso: ${_restDays.map((d) => _dayNames[d]).join(' y ')}',
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.6),
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
+                          const SizedBox(width: 12),
+                          Container(
+                            width: 70,
+                            height: 70,
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: Text(
+                                _isRestDay ? '😴' : '🌟',
+                                style: const TextStyle(fontSize: 32),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
-                          // Muestra días de descanso configurados
-                          if (_restDays.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              '😴 Descanso: ${_restDays.map((d) => _dayNames[d]).join(' y ')}',
-                              style: TextStyle(
-                                color: Colors.white.withOpacity(0.6),
-                                fontSize: 11,
+                    // Aviso día de descanso
+                    if (_isRestDay) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: const Row(
+                          children: [
+                            Text('😴', style: TextStyle(fontSize: 20)),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Hoy es tu día de descanso. Tu racha está protegida.',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black87,
+                                ),
                               ),
                             ),
                           ],
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      width: 70,
-                      height: 70,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(
-                        child: Text(
-                          _isRestDay ? '😴' : '🌟',
-                          style: const TextStyle(fontSize: 32),
                         ),
                       ),
+                    ],
+
+                    // Aviso formulario
+                    if (!_formDone) ...[
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.amber.shade300),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.amber),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                'Para desbloquear todas las funciones, primero completa tus datos personales.',
+                                style: TextStyle(fontSize: 13),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 24),
+                    const Text(
+                      '¿Qué quieres hacer hoy?',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
+                    const SizedBox(height: 12),
+
+                    _sectionCard(
+                      emoji: '👤',
+                      emojiColor: const Color(0xFF6C63FF),
+                      title: 'Mis datos personales',
+                      desc:
+                          'Registra tu peso, altura y objetivo. Calculamos tu IMC y adaptamos todo a ti.',
+                      badge: null,
+                      badgeColor: Colors.transparent,
+                      badgeTextColor: Colors.transparent,
+                      locked: false,
+                      onTap: () => Navigator.pushNamed(
+                        context,
+                        '/form',
+                      ).then((_) => _loadData()),
+                    ),
+
+                    _sectionCard(
+                      emoji: '💪',
+                      emojiColor: const Color(0xFF43A047),
+                      title: 'Rutinas de ejercicio',
+                      desc:
+                          'Ejercicios personalizados según tu objetivo. Temporizador, series y racha diaria.',
+                      badge: 'Sin equipamiento',
+                      badgeColor: const Color(0xFFEAF3DE),
+                      badgeTextColor: const Color(0xFF3B6D11),
+                      locked: !_formDone,
+                      onTap: () => _formDone
+                          ? Navigator.pushNamed(context, '/workout')
+                          : _showLockedMessage(),
+                    ),
+
+                    _sectionCard(
+                      emoji: '🧠',
+                      emojiColor: const Color(0xFFE91E63),
+                      title: 'Salud mental',
+                      desc:
+                          'Test psicológico, estado de ánimo diario y actividades de bienestar mental.',
+                      badge: 'Test + rutina',
+                      badgeColor: const Color(0xFFFBEAF0),
+                      badgeTextColor: const Color(0xFF993556),
+                      locked: !_formDone,
+                      onTap: () => _formDone
+                          ? Navigator.pushNamed(context, '/mental')
+                          : _showLockedMessage(),
+                    ),
+
+                    const SizedBox(height: 10),
+                    const Divider(height: 32),
+
+                    // ── Quiénes somos ─────────────────────
+                    const Text(
+                      '¿Qué es Luxury?',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    _infoCard(
+                      Icons.favorite_rounded,
+                      const Color(0xFFE91E63),
+                      'Nuestra misión',
+                      'Conectar el bienestar físico y mental en una sola plataforma. Sabemos que la insatisfacción corporal afecta directamente la salud emocional — Luxury aborda ambas.',
+                    ),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 10, right: 5),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.insights_rounded,
+                                  color: Color(0xFF6C63FF),
+                                  size: 22,
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Basado en datos',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Rutinas adaptadas a tu cuerpo y objetivos reales.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 10, left: 5),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.shield_rounded,
+                                  color: Color(0xFF43A047),
+                                  size: 22,
+                                ),
+                                const SizedBox(height: 8),
+                                const Text(
+                                  'Apoyo integral',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Ejercicio físico y salud mental juntos, no por separado.',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                    height: 1.4,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    _infoCard(
+                      Icons.groups_rounded,
+                      const Color(0xFF6C63FF),
+                      '¿Por qué lo hacemos?',
+                      'La insatisfacción corporal es uno de los factores más silenciosos en la aparición de ansiedad y depresión. Luxury nació para cambiar eso.',
+                    ),
+
+                    _infoCard(
+                      Icons.auto_awesome_rounded,
+                      const Color(0xFFFFA000),
+                      'Nuestra promesa',
+                      'No somos un app de dietas ni de motivación vacía. Somos un sistema que te acompaña con datos, rutinas reales y apoyo emocional.',
+                    ),
+
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
-
-              // Aviso día de descanso
-              if (_isRestDay) ...[
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.blue.shade200),
-                  ),
-                  child: const Row(
-                    children: [
-                      Text('😴', style: TextStyle(fontSize: 20)),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Hoy es tu día de descanso. Tu racha está protegida. ¡Descansa y recupérate!',
-                          style: TextStyle(fontSize: 13, color: Colors.black87),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              // Aviso si no llenó formulario
-              if (!_formDone) ...[
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.shade50,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: Colors.amber.shade300),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.amber),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Para desbloquear todas las funciones, primero completa tus datos personales.',
-                          style: TextStyle(fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 24),
-              const Text(
-                '¿Qué quieres hacer hoy?',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-
-              _sectionCard(
-                emoji: '👤',
-                emojiColor: const Color(0xFF6C63FF),
-                title: 'Mis datos personales',
-                desc:
-                    'Registra tu peso, altura y objetivo. Calculamos tu IMC y adaptamos todo a ti.',
-                badge: null,
-                badgeColor: Colors.transparent,
-                badgeTextColor: Colors.transparent,
-                locked: false,
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  '/form',
-                ).then((_) => _loadData()),
-              ),
-
-              _sectionCard(
-                emoji: '💪',
-                emojiColor: const Color(0xFF43A047),
-                title: 'Rutinas de ejercicio',
-                desc:
-                    'Ejercicios personalizados según tu objetivo. Temporizador, series y racha diaria incluidos.',
-                badge: 'Sin equipamiento',
-                badgeColor: const Color(0xFFEAF3DE),
-                badgeTextColor: const Color(0xFF3B6D11),
-                locked: !_formDone,
-                onTap: () => _formDone
-                    ? Navigator.pushNamed(context, '/workout')
-                    : _showLockedMessage(),
-              ),
-
-              _sectionCard(
-                emoji: '🧠',
-                emojiColor: const Color(0xFFE91E63),
-                title: 'Salud mental',
-                desc:
-                    'Test psicológico, estado de ánimo diario y actividades de bienestar mental guiadas.',
-                badge: 'Test + rutina',
-                badgeColor: const Color(0xFFFBEAF0),
-                badgeTextColor: const Color(0xFF993556),
-                locked: !_formDone,
-                onTap: () => _formDone
-                    ? Navigator.pushNamed(context, '/mental')
-                    : _showLockedMessage(),
-              ),
-
-              const SizedBox(height: 10),
-              const Divider(height: 32),
-
-              // ── Quiénes somos ───────────────────────────
-              const Text(
-                '¿Qué es Luxury?',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-
-              _infoCard(
-                Icons.favorite_rounded,
-                const Color(0xFFE91E63),
-                'Nuestra misión',
-                'Conectar el bienestar físico y mental en una sola plataforma. Sabemos que la insatisfacción corporal afecta directamente la salud emocional — Luxury aborda ambas.',
-              ),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 10, right: 5),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(
-                            Icons.insights_rounded,
-                            color: Color(0xFF6C63FF),
-                            size: 22,
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Basado en datos',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Rutinas adaptadas a tu cuerpo y objetivos reales.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(
-                      margin: const EdgeInsets.only(bottom: 10, left: 5),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Icon(
-                            Icons.shield_rounded,
-                            color: Color(0xFF43A047),
-                            size: 22,
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            'Apoyo integral',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Ejercicio físico y salud mental juntos, no por separado.',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                              height: 1.4,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              _infoCard(
-                Icons.groups_rounded,
-                const Color(0xFF6C63FF),
-                '¿Por qué lo hacemos?',
-                'La insatisfacción corporal es uno de los factores más silenciosos en la aparición de ansiedad y depresión. Luxury nació para cambiar eso — construyendo autoestima desde adentro hacia afuera.',
-              ),
-
-              _infoCard(
-                Icons.auto_awesome_rounded,
-                const Color(0xFFFFA000),
-                'Nuestra promesa',
-                'No somos un app de dietas ni de motivación vacía. Somos un sistema que te acompaña con datos, rutinas reales y apoyo emocional — todo en un solo lugar.',
-              ),
-
-              const SizedBox(height: 20),
-            ],
-          ),
-        ),
       ),
     );
   }

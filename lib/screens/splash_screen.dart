@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../utils/local_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -33,9 +33,16 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _navigate() async {
-    final loggedIn = await LocalStorage.isLoggedIn();
+    final prefs = await SharedPreferences.getInstance();
+    final loggedIn = prefs.getBool('isLoggedIn') ?? false;
+    final token = prefs.getString('access_token');
     if (!mounted) return;
-    Navigator.pushReplacementNamed(context, loggedIn ? '/home' : '/login');
+    // Solo va al home si tiene sesión Y token
+    if (loggedIn && token != null) {
+      Navigator.pushReplacementNamed(context, '/home');
+    } else {
+      Navigator.pushReplacementNamed(context, '/login');
+    }
   }
 
   @override
@@ -63,27 +70,41 @@ class _SplashScreenState extends State<SplashScreen>
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // 🖼️ IMAGEN: reemplaza con tu logo así:
-                  // Image.asset('assets/images/logo.png', width: 120),
-                  const Icon(
-                    Icons.self_improvement,
-                    size: 100,
-                    color: Colors.white,
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.self_improvement,
+                      size: 80,
+                      color: Colors.white,
+                    ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 28),
                   const Text(
                     'Luxury',
                     style: TextStyle(
-                      fontSize: 36,
+                      fontSize: 42,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
-                      letterSpacing: 2,
+                      letterSpacing: 3,
                     ),
                   ),
                   const SizedBox(height: 8),
                   const Text(
                     'Tu bienestar integral',
                     style: TextStyle(fontSize: 16, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 40),
+                  const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      color: Colors.white70,
+                      strokeWidth: 2,
+                    ),
                   ),
                 ],
               ),

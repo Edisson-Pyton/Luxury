@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../utils/local_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/api_service.dart';
 
 // ── Modelo ────────────────────────────────────────────────────
 class Exercise {
@@ -621,23 +622,15 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
   }
 
   Future<void> _loadData() async {
-    final data = await LocalStorage.getFormData();
-    final name = await LocalStorage.getName();
-    final streak = await LocalStorage.getStreak();
-    final doneToday = await LocalStorage.workedOutToday();
-
-    // Primero obtenemos el goal real
-    final goal = data?['goal'] ?? 'Perder peso';
-    final exercises = _routinesByGoal[goal]!;
-
-    // Ahora sí limpiamos con el goal correcto
-    await LocalStorage.cleanOldProgress(goal);
-
-    // Leemos el progreso guardado hoy para este objetivo
-    final todayDone = await LocalStorage.getTodayProgress(goal);
+    final prefs = await SharedPreferences.getInstance();
+    final name = prefs.getString('name') ?? 'Usuario';
+    final goal = prefs.getString('goal') ?? 'Perder peso';
+    final streakData = await ApiService.getWorkoutStreak();
+    final todayDone = await ApiService.getWorkoutProgress(goal);
 
     if (!mounted) return;
 
+    final exercises = _routinesByGoal[goal]!;
     final completed = List.generate(
       exercises.length,
       (i) => todayDone.contains(i),
@@ -647,22 +640,22 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
     setState(() {
       _goal = goal;
       _name = name;
-      _streak = streak;
-      _doneToday = doneToday;
+      _streak = streakData['streak'] ?? 0;
+      _doneToday = streakData['worked_today'] ?? false;
       _loading = false;
       _exercises = exercises;
       _completed = completed;
-      _showSummary = allDone && doneToday;
+      _showSummary = allDone && (streakData['worked_today'] ?? false);
     });
   }
 
   Future<void> _onExerciseDone(int index) async {
-    await LocalStorage.saveExerciseProgress(index, _goal);
+    // Guarda en el servidor
+    await ApiService.saveWorkoutProgress(index, _goal);
     setState(() => _completed[index] = true);
 
     if (_completed.every((c) => c)) {
-      await LocalStorage.registerWorkoutDone();
-      final streak = await LocalStorage.getStreak();
+      final streak = await ApiService.registerWorkoutDone();
       if (!mounted) return;
       setState(() {
         _streak = streak;
@@ -994,7 +987,7 @@ class _WorkoutScreenState extends State<WorkoutScreen> {
                 border: Border.all(color: Colors.amber.shade200),
               ),
               child: const Text(
-                '😴 El descanso también es progreso. Si llevas varios días seguidos, mañana descansa.',
+                '😴 El descanso también es progreso.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 13, color: Colors.black54),
               ),
