@@ -11,6 +11,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: List files
+        run: ls -la
+
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.0'
@@ -18,14 +21,12 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
-        working-directory: flutter_proyecto
 
       - name: Build web
         run: flutter build web --release
-        working-directory: flutter_proyecto
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./flutter_proyecto/build/web
+          publish_dir: ./build/web
