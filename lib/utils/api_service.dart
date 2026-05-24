@@ -3,11 +3,13 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  // 🔗 URL base de tu backend en Railway
   static const String _base = 'https://web-production-76013.up.railway.app';
 
+  static const Map<String, String> _publicHeaders = {
+    'Content-Type': 'application/json',
+  };
+
   // ── Token ─────────────────────────────────────────────────
-  // Token en memoria (más confiable en web)
   static String? _cachedToken;
 
   static Future<String?> getToken() async {
@@ -18,7 +20,7 @@ class ApiService {
   }
 
   static Future<void> saveTokens(String access, String refresh) async {
-    _cachedToken = access; // guarda en memoria
+    _cachedToken = access;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('access_token', access);
     await prefs.setString('refresh_token', refresh);
@@ -33,16 +35,71 @@ class ApiService {
 
   static Future<Map<String, String>> _authHeaders() async {
     final token = await getToken();
-    print('TOKEN ENVIADO: $token'); // para debug
     return {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer $token',
     };
   }
 
-  static const Map<String, String> _publicHeaders = {
-    'Content-Type': 'application/json',
-  };
+  // ── Refresh token automático ──────────────────────────────
+  static Future<bool> _refreshToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    final refreshToken = prefs.getString('refresh_token');
+    if (refreshToken == null) return false;
+
+    final res = await http.post(
+      Uri.parse('$_base/api/token/refresh/'),
+      headers: _publicHeaders,
+      body: jsonEncode({'refresh': refreshToken}),
+    );
+
+    if (res.statusCode == 200) {
+      final data = jsonDecode(res.body);
+      _cachedToken = data['access'];
+      await prefs.setString('access_token', data['access']);
+      return true;
+    }
+    return false;
+  }
+
+  // POST autenticado con retry
+  static Future<http.Response> _authenticatedPost(
+    String url,
+    Map<String, dynamic> body,
+  ) async {
+    var headers = await _authHeaders();
+    var response = await http.post(
+      Uri.parse(url),
+      headers: headers,
+      body: jsonEncode(body),
+    );
+    if (response.statusCode == 401) {
+      final refreshed = await _refreshToken();
+      if (refreshed) {
+        headers = await _authHeaders();
+        response = await http.post(
+          Uri.parse(url),
+          headers: headers,
+          body: jsonEncode(body),
+        );
+      }
+    }
+    return response;
+  }
+
+  // GET autenticado con retry
+  static Future<http.Response> _authenticatedGet(String url) async {
+    var headers = await _authHeaders();
+    var response = await http.get(Uri.parse(url), headers: headers);
+    if (response.statusCode == 401) {
+      final refreshed = await _refreshToken();
+      if (refreshed) {
+        headers = await _authHeaders();
+        response = await http.get(Uri.parse(url), headers: headers);
+      }
+    }
+    return response;
+  }
 
   // ── REGISTRO ──────────────────────────────────────────────
   static Future<Map<String, dynamic>> register({
@@ -103,10 +160,7 @@ class ApiService {
 
   // ── PERFIL ────────────────────────────────────────────────
   static Future<Map<String, dynamic>?> getProfile() async {
-    final res = await http.get(
-      Uri.parse('$_base/api/profile/'),
-      headers: await _authHeaders(),
-    );
+    final res = await _authenticatedGet('$_base/api/profile/');
     if (res.statusCode == 200) return jsonDecode(res.body);
     return null;
   }
@@ -117,18 +171,13 @@ class ApiService {
     required double height,
     required String goal,
   }) async {
-    final res = await http.post(
-      Uri.parse('$_base/api/profile/'),
-      headers: await _authHeaders(),
-      body: jsonEncode({
-        'age': age,
-        'weight': weight,
-        'height': height,
-        'goal': goal,
-      }),
-    );
+    final res = await _authenticatedPost('$_base/api/profile/', {
+      'age': age,
+      'weight': weight,
+      'height': height,
+      'goal': goal,
+    });
     if (res.statusCode == 200) {
-      // Guarda también local para acceso rápido
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('age', age);
       await prefs.setDouble('weight', weight);
@@ -141,19 +190,16 @@ class ApiService {
 
   // ── DÍAS DE DESCANSO ──────────────────────────────────────
   static Future<bool> saveRestDays(List<int> days) async {
-    final res = await http.post(
-      Uri.parse('$_base/api/rest-days/'),
-      headers: await _authHeaders(),
-      body: jsonEncode({'rest_days': days}),
-    );
+    final res = await _authenticatedPost('$_base/api/rest-days/', {
+      'rest_days': days,
+    });
     return res.statusCode == 200;
   }
 
   // ── PROGRESO DE EJERCICIOS ────────────────────────────────
   static Future<List<int>> getWorkoutProgress(String goal) async {
-    final res = await http.get(
-      Uri.parse('$_base/api/workout/progress/?goal=$goal'),
-      headers: await _authHeaders(),
+    final res = await _authenticatedGet(
+      '$_base/api/workout/progress/?goal=$goal',
     );
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
@@ -163,58 +209,42 @@ class ApiService {
   }
 
   static Future<bool> saveWorkoutProgress(int index, String goal) async {
-    final res = await http.post(
-      Uri.parse('$_base/api/workout/progress/'),
-      headers: await _authHeaders(),
-      body: jsonEncode({'index': index, 'goal': goal}),
-    );
+    final res = await _authenticatedPost('$_base/api/workout/progress/', {
+      'index': index,
+      'goal': goal,
+    });
     return res.statusCode == 200;
   }
 
   // ── RACHA FÍSICA ──────────────────────────────────────────
   static Future<Map<String, dynamic>> getWorkoutStreak() async {
-    final res = await http.get(
-      Uri.parse('$_base/api/workout/streak/'),
-      headers: await _authHeaders(),
-    );
+    final res = await _authenticatedGet('$_base/api/workout/streak/');
     if (res.statusCode == 200) return jsonDecode(res.body);
     return {'streak': 0, 'worked_today': false, 'is_rest_day': false};
   }
 
   static Future<int> registerWorkoutDone() async {
-    final res = await http.post(
-      Uri.parse('$_base/api/workout/streak/'),
-      headers: await _authHeaders(),
-    );
+    final res = await _authenticatedPost('$_base/api/workout/streak/', {});
     if (res.statusCode == 200) return jsonDecode(res.body)['streak'];
     return 0;
   }
 
   // ── RACHA MENTAL ──────────────────────────────────────────
   static Future<Map<String, dynamic>> getMentalStreak() async {
-    final res = await http.get(
-      Uri.parse('$_base/api/mental/streak/'),
-      headers: await _authHeaders(),
-    );
+    final res = await _authenticatedGet('$_base/api/mental/streak/');
     if (res.statusCode == 200) return jsonDecode(res.body);
     return {'streak': 0, 'done_today': false, 'is_rest_day': false};
   }
 
   static Future<int> registerMentalDone() async {
-    final res = await http.post(
-      Uri.parse('$_base/api/mental/streak/'),
-      headers: await _authHeaders(),
-    );
+    final res = await _authenticatedPost('$_base/api/mental/streak/', {});
     if (res.statusCode == 200) return jsonDecode(res.body)['streak'];
     return 0;
   }
 
   // ── PROGRESO MENTAL ───────────────────────────────────────
   static Future<List<int>> getMentalProgress() async {
-    final res = await http.get(
-      Uri.parse('$_base/api/mental/progress/'),
-      headers: await _authHeaders(),
-    );
+    final res = await _authenticatedGet('$_base/api/mental/progress/');
     if (res.statusCode == 200) {
       final data = jsonDecode(res.body);
       return List<int>.from(data['completed']);
@@ -223,39 +253,29 @@ class ApiService {
   }
 
   static Future<bool> saveMentalProgress(int index) async {
-    final res = await http.post(
-      Uri.parse('$_base/api/mental/progress/'),
-      headers: await _authHeaders(),
-      body: jsonEncode({'index': index}),
-    );
+    final res = await _authenticatedPost('$_base/api/mental/progress/', {
+      'index': index,
+    });
     return res.statusCode == 200;
   }
 
   // ── ESTADO DE ÁNIMO ───────────────────────────────────────
   static Future<Map<String, dynamic>> getMood() async {
-    final res = await http.get(
-      Uri.parse('$_base/api/mental/mood/'),
-      headers: await _authHeaders(),
-    );
+    final res = await _authenticatedGet('$_base/api/mental/mood/');
     if (res.statusCode == 200) return jsonDecode(res.body);
     return {'today_mood': null, 'week_moods': {}};
   }
 
   static Future<Map<String, dynamic>> saveMood(int mood) async {
-    final res = await http.post(
-      Uri.parse('$_base/api/mental/mood/'),
-      headers: await _authHeaders(),
-      body: jsonEncode({'mood': mood}),
-    );
+    final res = await _authenticatedPost('$_base/api/mental/mood/', {
+      'mood': mood,
+    });
     return {'status': res.statusCode, 'data': jsonDecode(res.body)};
   }
 
   // ── TEST PSICOLÓGICO ──────────────────────────────────────
   static Future<Map<String, dynamic>> getMentalTest() async {
-    final res = await http.get(
-      Uri.parse('$_base/api/mental/test/'),
-      headers: await _authHeaders(),
-    );
+    final res = await _authenticatedGet('$_base/api/mental/test/');
     if (res.statusCode == 200) return jsonDecode(res.body);
     return {'done': false};
   }
@@ -265,15 +285,11 @@ class ApiService {
     required int score,
     required List<int> answers,
   }) async {
-    final res = await http.post(
-      Uri.parse('$_base/api/mental/test/'),
-      headers: await _authHeaders(),
-      body: jsonEncode({
-        'profile': profile,
-        'score': score,
-        'answers': answers,
-      }),
-    );
+    final res = await _authenticatedPost('$_base/api/mental/test/', {
+      'profile': profile,
+      'score': score,
+      'answers': answers,
+    });
     return res.statusCode == 200;
   }
 }
