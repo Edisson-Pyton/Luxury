@@ -36,19 +36,24 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _loadData() async {
     setState(() => _loading = true);
 
-    // Datos locales rápidos
     final prefs = await SharedPreferences.getInstance();
     final name = prefs.getString('name') ?? 'Usuario';
-    final formDone = prefs.getBool('formCompleted') ?? false;
 
-    // Datos del servidor
+    // Lee del servidor, no de caché local
+    final profile = await ApiService.getProfile();
     final workoutData = await ApiService.getWorkoutStreak();
     final mentalData = await ApiService.getMentalStreak();
-    final profile = await ApiService.getProfile();
 
     if (!mounted) return;
+
+    // formCompleted viene del servidor, no de caché
+    final formDone = profile?['form_completed'] ?? false;
+
+    // Actualiza también la caché local
+    await prefs.setBool('formCompleted', formDone);
+
     setState(() {
-      _name = name;
+      _name = profile?['name'] ?? name;
       _formDone = formDone;
       _streak = workoutData['streak'] ?? 0;
       _mentalStreak = mentalData['streak'] ?? 0;
